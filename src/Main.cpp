@@ -1,6 +1,7 @@
 // Recursive ray tracing
 
 #include "Platform/Platform.hpp"
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <memory>
@@ -14,6 +15,20 @@
 // Setup scene
 struct Light
 {
+	Vec3f position {};
+	float brightness;
+
+	Light(Vec3f pos, float bright) :
+		position(pos),
+		brightness(bright)
+	{}
+};
+
+struct Collision
+{
+	Vec3f position;
+	Vec3f reflection;
+	Vec3f normal;
 };
 
 struct Sphere
@@ -28,7 +43,8 @@ struct Sphere
 
 	float RayIntersection(
 		const Vec3f& orig,
-		const Vec3f& direction)
+		const Vec3f& direction,
+		Collision& hit)
 	{
 		Vec3f o_minus_c = orig - position;
 
@@ -47,9 +63,22 @@ struct Sphere
 		{
 			return -1;
 		}
+
+		// Calc hit position and reflection
+		hit.position = orig + direction * dist;
+		hit.normal = hit.position - position;
+		hit.normal.normalize();
+		hit.reflection = direction - hit.normal * 2 * direction.dotProduct(hit.normal);
+
 		return dist;
 	}
 };
+
+template <typename T>
+T clip(const T& n, const T& lower, const T& upper)
+{
+	return std::max(lower, std::min(n, upper));
+}
 
 // Raytracer
 class Raytracer
@@ -80,6 +109,19 @@ public:
 			Sphere s1 = Sphere(pos, 0.5 + (rand() % 1000) / 1000.0);
 			spheres.push_back(s1);
 		}
+
+		for (int i = 0; i < 2; i++)
+		{
+			Vec3f pos = Vec3f(
+				-5.0 + (10.0 * ((rand() % 1000) / 1000.0)),
+				-20.0 + (40.0 * ((rand() % 1000) / 1000.0)),
+				-10.0 - 20.0 * ((rand() % 1000) / 1000));
+
+			float brightness = 0.1 + 0.4 * ((rand() % 1000) / 1000.0);
+
+			Light l = Light(pos, brightness);
+			lights.push_back(l);
+		}
 	}
 
 	void UpdateRayDirections()
@@ -99,34 +141,64 @@ public:
 		}
 	};
 
-	sf::Uint8 castRay(Vec3f& orig,
-		const Vec3f& dir)
+	float castRay(Vec3f& orig,
+		const Vec3f& dir,
+		int depth)
 	{
-		// int min_ind = -1;
-		// float min_dist = 1e6;
+		Collision hit {};
+		float dist = 1e6;
 
 		for (int i = 0; i < (int)spheres.size(); i++)
 		{
-			float dist = spheres[i].RayIntersection(orig, dir);
-			if (dist > 0)
-				return 100;
+			Collision c_hit;
+			float cdist = spheres[i].RayIntersection(orig, dir, c_hit);
+			if (cdist > 0 && cdist < dist)
+			{
+				hit = c_hit;
+				dist = cdist;
+			}
 		}
 
-		// const std::vector<std::unique_ptr<Sphere>>&spheres,
-		// const std::vector<std::unique_ptr<Light>>&lights
-		// if (scene.spheres.size() > 0 && dir.length() > 0 && orig.length())
-		// {};
+		if (dist > 0 && dist < 1e6)
+		{
+			// Check illumination
+			float bright = 0.0;
+			int num = (int)lights.size();
+			for (int i = 0; i < num; i++)
+			{
+				Vec3f path = hit.position - lights[i].position;
+				path.normalize();
+				bright += lights[i].brightness * (acos(path.dotProduct(hit.normal)) / PI);
+			};
+
+			float extra = 0.0f;
+			if (depth < 4)
+			{
+				Vec3f pos = Vec3f(hit.position.x, hit.position.y, hit.position.z);
+				Vec3f ref = Vec3f(hit.reflection.x, hit.reflection.y, hit.reflection.z);
+				extra = castRay(pos, ref, depth + 1);
+			}
+			if (extra > 0)
+			{
+				extra = clip(extra, 0.0f, 1.0f);
+				bright += extra;
+				num += 1;
+			}
+
+			return std::pow(0.5, depth) * (bright / num);
+		}
+
 		return 0;
 	}
 
 	void Render(std::vector<sf::Uint8>& pixelBuffer)
 	{
-		// UpdateRayDirections();
-		// pixelBuffer[0] = 100;
 		for (int i = 0; i < WINDOW_WIDTH * WINDOW_HEIGHT; i++)
 		{
 			// Cast ray
-			auto bright = castRay(orig, directions[i]);
+			float bright = castRay(orig, directions[i], 0);
+			bright = clip(500.0 * bright, 0.0, 255.0);
+
 			uint ind = i * 4;
 			pixelBuffer[ind] = bright;
 			pixelBuffer[ind + 1] = bright;
@@ -171,14 +243,6 @@ int main()
 	std::string fpsString = "";
 	sf::Text fpsText;
 
-	// Rendering stuff
-	// std::vector<sf::Uint8> pixelBuffer(WINDOW_WIDTH * WINDOW_HEIGHT * 4);
-	// sf::Texture texture;
-	// sf::RectangleShape sprite;
-
-	// texture.create(WINDOW_WIDTH, WINDOW_HEIGHT);
-	// sprite.setSize({ WINDOW_WIDTH, WINDOW_HEIGHT });
-
 	tracer.UpdateRayDirections();
 
 	// Start the game loop
@@ -193,14 +257,9 @@ int main()
 				window.close();
 		}
 
-		// Raycasting
-		// drawBuffer.clearPixels();
-		// drawBuffer.setPixel(300, 300, sf::Color(255, 0, 0, 255));
-
 		// To the screen
 		window.clear();
 		tracer.Render(drawBuffer.pixelBuffer);
-		// drawBuffer.pixelBuffer = tracer.RenderNoise();
 		drawBuffer.render(window);
 
 		// FPS
