@@ -112,8 +112,8 @@ public:
 	T x, y, z;
 };
 
-typedef Vec3<float> Vec3f;
-typedef Vec3<int> Vec3i;
+using Vec3f = Vec3<float>;
+using Vec3i = Vec3<int>;
 
 template <typename T>
 class Matrix44
@@ -180,5 +180,5 @@ public:
 	}
 };
 
-typedef Matrix44<float> Matrix44f;
-typedef Matrix44<int> Matrix44i;
+using Matrix44f = Matrix44<float>;
+using Matrix44i = Matrix44<int>;

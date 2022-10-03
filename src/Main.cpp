@@ -90,7 +90,7 @@ public:
 	Matrix44f cameraToWorld {};
 	Vec3f orig = Vec3f(0);
 
-	// Level
+	// Level (should probably be refactored into separate level class)
 	std::vector<Sphere> spheres;
 	std::vector<Light> lights;
 
