@@ -13,6 +13,39 @@
 #include "Renderer.h"
 
 // Setup scene
+struct Color
+{
+	int r, g, b;
+	Color() :
+		r(0),
+		g(0),
+		b(0)
+	{}
+	Color(const Color& col) :
+		r(col.r),
+		g(col.g),
+		b(col.b)
+	{}
+	Color(int re, int gr, int bl) :
+		r(re),
+		g(gr),
+		b(bl)
+	{}
+	void operator+=(Color& col)
+	{
+		r = std::min(255, std::max(0, col.r + r));
+		g = std::min(255, std::max(0, col.g + g));
+		b = std::min(255, std::max(0, col.b + b));
+	}
+	Color operator*(float f)
+	{
+		int rr = std::min(255, std::max(0, (int)(r * f)));
+		int gg = std::min(255, std::max(0, (int)(g * f)));
+		int bb = std::min(255, std::max(0, (int)(b * f)));
+		return Color(rr, gg, bb);
+	}
+};
+
 struct Light
 {
 	Vec3f position {};
@@ -29,16 +62,19 @@ struct Collision
 	Vec3f position;
 	Vec3f reflection;
 	Vec3f normal;
+	Color color;
 };
 
 struct Sphere
 {
 	Vec3f position {};
-	float radius;
+	float radius {};
+	Color color {};
 
-	Sphere(Vec3f pos, float rad) :
+	Sphere(Vec3f pos, float rad, Color col) :
 		position(pos),
-		radius(rad)
+		radius(rad),
+		color(col)
 	{}
 
 	float RayIntersection(
@@ -69,6 +105,7 @@ struct Sphere
 		hit.normal = hit.position - position;
 		hit.normal.normalize();
 		hit.reflection = direction - hit.normal * 2 * direction.dotProduct(hit.normal);
+		hit.color = color;
 
 		return dist;
 	}
@@ -106,7 +143,8 @@ public:
 				-3.0 + (6.0 * ((rand() % 1000) / 1000.0)),
 				-10.0 - 20.0 * ((rand() % 1000) / 1000));
 
-			Sphere s1 = Sphere(pos, 0.5 + (rand() % 1000) / 1000.0);
+			Color col = Color(rand() % 255, rand() % 255, rand() % 255);
+			Sphere s1 = Sphere(pos, 0.5 + (rand() % 1000) / 1000.0, col);
 			spheres.push_back(s1);
 		}
 
@@ -117,7 +155,7 @@ public:
 				-20.0 + (40.0 * ((rand() % 1000) / 1000.0)),
 				-10.0 - 20.0 * ((rand() % 1000) / 1000));
 
-			float brightness = 0.1 + 0.4 * ((rand() % 1000) / 1000.0);
+			float brightness = 0.4 + 0.3 * ((rand() % 1000) / 1000.0);
 
 			Light l = Light(pos, brightness);
 			lights.push_back(l);
@@ -141,7 +179,7 @@ public:
 		}
 	};
 
-	float castRay(Vec3f& orig,
+	Color castRay(Vec3f& orig,
 		const Vec3f& dir,
 		int depth)
 	{
@@ -159,36 +197,32 @@ public:
 			}
 		}
 
+		Color bright {};
 		if (dist > 0 && dist < 1e6)
 		{
 			// Check illumination
-			float bright = 0.0;
 			int num = (int)lights.size();
 			for (int i = 0; i < num; i++)
 			{
 				Vec3f path = hit.position - lights[i].position;
 				path.normalize();
-				bright += lights[i].brightness * (acos(path.dotProduct(hit.normal)) / PI);
+				Color c = hit.color * (acos(path.dotProduct(hit.normal)) / PI) * lights[i].brightness;
+				bright += c;
 			};
 
-			float extra = 0.0f;
-			if (depth < 4)
+			Color extra {};
+			if (depth < 8)
 			{
 				Vec3f pos = Vec3f(hit.position.x, hit.position.y, hit.position.z);
 				Vec3f ref = Vec3f(hit.reflection.x, hit.reflection.y, hit.reflection.z);
 				extra = castRay(pos, ref, depth + 1);
-			}
-			if (extra > 0)
-			{
-				extra = clip(extra, 0.0f, 1.0f);
 				bright += extra;
-				num += 1;
 			}
 
-			return std::pow(0.5, depth) * (bright / num);
+			return bright * (std::pow(0.9, depth) / (float)num);
 		}
 
-		return 0;
+		return bright;
 	}
 
 	void Render(std::vector<sf::Uint8>& pixelBuffer)
@@ -196,13 +230,12 @@ public:
 		for (int i = 0; i < WINDOW_WIDTH * WINDOW_HEIGHT; i++)
 		{
 			// Cast ray
-			float bright = castRay(orig, directions[i], 0);
-			bright = clip(500.0 * bright, 0.0, 255.0);
+			Color bright = castRay(orig, directions[i], 0);
 
 			uint ind = i * 4;
-			pixelBuffer[ind] = bright;
-			pixelBuffer[ind + 1] = bright;
-			pixelBuffer[ind + 2] = bright;
+			pixelBuffer[ind] = bright.r;
+			pixelBuffer[ind + 1] = bright.g;
+			pixelBuffer[ind + 2] = bright.b;
 		}
 	};
 
@@ -263,10 +296,10 @@ int main()
 		drawBuffer.render(window);
 
 		// FPS
-		if (frame % 100 == 0)
+		if (frame % 10 == 0)
 		{
 			float tick = clock.getElapsedTime().asSeconds();
-			int fps = round(1.0f / ((tick - lastTick) / 100.0f));
+			int fps = round(1.0f / ((tick - lastTick) / 10.0f));
 			lastTick = tick;
 			fpsString = std::to_string(fps) + " fps";
 			fpsText = sf::Text(fpsString, font, 20);

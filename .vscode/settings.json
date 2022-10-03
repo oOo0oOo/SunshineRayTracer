@@ -87,7 +87,8 @@
 		"streambuf": "cpp",
 		"thread": "cpp",
 		"typeinfo": "cpp",
-		"variant": "cpp"
+		"variant": "cpp",
+		"filesystem": "cpp"
 	},
 	// "terminal.integrated.defaultProfile.windows": "Git Bash",
 	"terminal.integrated.env.windows": {
