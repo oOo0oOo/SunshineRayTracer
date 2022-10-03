@@ -2,9 +2,12 @@
 
 #include "Platform/Platform.hpp"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <ctime>
 #include <iostream>
 #include <memory>
+#include <sys/time.h>
 #include <time.h>
 #include <vector>
 
@@ -70,11 +73,14 @@ struct Sphere
 	Vec3f position {};
 	float radius {};
 	Color color {};
+	Vec3f velocity {};
+	bool forward = true;
 
-	Sphere(Vec3f pos, float rad, Color col) :
+	Sphere(Vec3f pos, float rad, Color col, Vec3f vel) :
 		position(pos),
 		radius(rad),
-		color(col)
+		color(col),
+		velocity(vel)
 	{}
 
 	float RayIntersection(
@@ -109,6 +115,19 @@ struct Sphere
 
 		return dist;
 	}
+
+	void Update(float dT)
+	{
+		if (forward)
+			position += velocity * dT;
+		else
+			position -= velocity * dT;
+	}
+
+	void ToggleDirection()
+	{
+		forward = !forward;
+	}
 };
 
 template <typename T>
@@ -134,8 +153,16 @@ public:
 	// Rays
 	std::vector<Vec3f> directions;
 
+	// Gameloop stuff
+	time_t lastTick;
+
 	Raytracer()
 	{
+		struct timeval time_now
+		{};
+		gettimeofday(&time_now, nullptr);
+		lastTick = (time_now.tv_sec * 1000) + (time_now.tv_usec / 1000);
+
 		for (int i = 0; i < 8; i++)
 		{
 			Vec3f pos = Vec3f(
@@ -143,8 +170,11 @@ public:
 				-3.0 + (6.0 * ((rand() % 1000) / 1000.0)),
 				-10.0 - 20.0 * ((rand() % 1000) / 1000));
 
+			Vec3f vel = Vec3f((rand() % 1000), (rand() % 1000), (rand() % 1000));
+			vel /= 2000.0;
+
 			Color col = Color(rand() % 255, rand() % 255, rand() % 255);
-			Sphere s1 = Sphere(pos, 0.5 + (rand() % 1000) / 1000.0, col);
+			Sphere s1 = Sphere(pos, 0.5 + (rand() % 1000) / 1000.0, col, vel);
 			spheres.push_back(s1);
 		}
 
@@ -162,6 +192,7 @@ public:
 		}
 	}
 
+	// Use when camera position is updated
 	void UpdateRayDirections()
 	{
 		cameraToWorld.multVecMatrix(Vec3f(0), orig);
@@ -249,6 +280,28 @@ public:
 		}
 		return pixelBuffer;
 	};
+
+	void Update()
+	{
+		struct timeval time_now
+		{};
+		gettimeofday(&time_now, nullptr);
+		time_t t = (time_now.tv_sec * 1000) + (time_now.tv_usec / 1000);
+		float dT = (lastTick - t) / 1000.0;
+		lastTick = t;
+		for (auto& sphere : spheres)
+		{
+			sphere.Update(dT);
+		}
+	}
+
+	void ToggleSphereDirections()
+	{
+		for (auto& sphere : spheres)
+		{
+			sphere.ToggleDirection();
+		}
+	}
 };
 
 // Run it
@@ -290,6 +343,8 @@ int main()
 				window.close();
 		}
 
+		tracer.Update();
+
 		// To the screen
 		window.clear();
 		tracer.Render(drawBuffer.pixelBuffer);
@@ -303,6 +358,10 @@ int main()
 			lastTick = tick;
 			fpsString = std::to_string(fps) + " fps";
 			fpsText = sf::Text(fpsString, font, 20);
+		}
+		if (frame % 120 == 0)
+		{
+			tracer.ToggleSphereDirections();
 		}
 
 		window.draw(fpsText);
