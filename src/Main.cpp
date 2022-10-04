@@ -36,16 +36,22 @@ struct Color
 	{}
 	void operator+=(Color& col)
 	{
-		r = std::min(255, std::max(0, col.r + r));
-		g = std::min(255, std::max(0, col.g + g));
-		b = std::min(255, std::max(0, col.b + b));
+		r = std::min(255, col.r + r);
+		g = std::min(255, col.g + g);
+		b = std::min(255, col.b + b);
 	}
-	Color operator*(float f)
+	Color operator*(float f) const
 	{
-		int rr = std::min(255, std::max(0, (int)(r * f)));
-		int gg = std::min(255, std::max(0, (int)(g * f)));
-		int bb = std::min(255, std::max(0, (int)(b * f)));
+		int rr = std::min(255, (int)(r * f));
+		int gg = std::min(255, (int)(g * f));
+		int bb = std::min(255, (int)(b * f));
 		return Color(rr, gg, bb);
+	}
+	void operator*=(float f)
+	{
+		r = std::min(255, (int)(r * f));
+		g = std::min(255, (int)(g * f));
+		b = std::min(255, (int)(b * f));
 	}
 };
 
@@ -100,7 +106,8 @@ struct Sphere
 		}
 
 		float dRoot = sqrt(discriminant);
-		float dist = std::min(-p - dRoot, -p + dRoot);
+		// float dist = std::min(-p - dRoot, -p + dRoot);
+		float dist = -p - dRoot;
 		if (dist < 0)
 		{
 			return -1;
@@ -185,7 +192,7 @@ public:
 				-20.0 + (40.0 * ((rand() % 1000) / 1000.0)),
 				-10.0 - 20.0 * ((rand() % 1000) / 1000));
 
-			float brightness = 0.4 + 0.3 * ((rand() % 1000) / 1000.0);
+			float brightness = 0.7 + 0.3 * ((rand() % 1000) / 1000.0);
 
 			Light l = Light(pos, brightness);
 			lights.push_back(l);
@@ -210,9 +217,10 @@ public:
 		}
 	};
 
-	Color castRay(Vec3f& orig,
+	void castRay(Vec3f& orig,
 		const Vec3f& dir,
-		int depth)
+		int depth,
+		Color& out_color)
 	{
 		Collision hit {};
 		float dist = 1e6;
@@ -228,8 +236,7 @@ public:
 			}
 		}
 
-		Color bright {};
-		if (dist > 0 && dist < 1e6)
+		if (dist > 0 && dist < 1000)
 		{
 			// Check illumination
 			int num = (int)lights.size();
@@ -237,48 +244,33 @@ public:
 			{
 				Vec3f path = hit.position - lights[i].position;
 				path.normalize();
-				Color c = hit.color * (acos(path.dotProduct(hit.normal)) / PI) * lights[i].brightness;
-				bright += c;
+				hit.color *= (acos(path.dotProduct(hit.normal)) / PI) * lights[i].brightness;
+				out_color += hit.color;
 			};
 
-			Color extra {};
 			if (depth < 8)
 			{
-				Vec3f pos = Vec3f(hit.position.x, hit.position.y, hit.position.z);
-				Vec3f ref = Vec3f(hit.reflection.x, hit.reflection.y, hit.reflection.z);
-				extra = castRay(pos, ref, depth + 1);
-				bright += extra;
+				Color extra {};
+				castRay(hit.position, hit.reflection, depth + 1, extra);
+				out_color += extra;
 			}
-
-			return bright * (std::pow(0.9, depth) / (float)num);
+			out_color *= (std::pow(0.9, depth) / (float)num);
 		}
-
-		return bright;
-	}
+	};
 
 	void Render(std::vector<sf::Uint8>& pixelBuffer)
 	{
 		for (int i = 0; i < WINDOW_WIDTH * WINDOW_HEIGHT; i++)
 		{
 			// Cast ray
-			Color bright = castRay(orig, directions[i], 0);
+			Color bright {};
+			castRay(orig, directions[i], 0, bright);
 
 			uint ind = i * 4;
 			pixelBuffer[ind] = bright.r;
 			pixelBuffer[ind + 1] = bright.g;
 			pixelBuffer[ind + 2] = bright.b;
 		}
-	};
-
-	std::vector<sf::Uint8> RenderNoise()
-	{
-		std::vector<sf::Uint8> pixelBuffer(WINDOW_WIDTH * WINDOW_HEIGHT * 4);
-
-		for (int i = 0; i < WINDOW_WIDTH * WINDOW_HEIGHT * 4; i++)
-		{
-			pixelBuffer[i] = std::rand() % 255;
-		}
-		return pixelBuffer;
 	};
 
 	void Update()
