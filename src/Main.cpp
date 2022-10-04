@@ -7,13 +7,14 @@
 #include <ctime>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <sys/time.h>
+#include <thread>
 #include <time.h>
 #include <vector>
 
 #include "Constants.h"
 #include "Geometry.cpp"
-#include "Renderer.h"
 
 // Setup scene
 struct Color
@@ -143,7 +144,7 @@ T clip(const T& n, const T& lower, const T& upper)
 	return std::max(lower, std::min(n, upper));
 }
 
-// Raytracer
+// Raytracer (actually more like a everything class...)
 class Raytracer
 {
 public:
@@ -157,19 +158,42 @@ public:
 	std::vector<Sphere> spheres;
 	std::vector<Light> lights;
 
-	// Rays
+	// Ray directions are cached bc only a change in camera pos/rot will change them
 	std::vector<Vec3f> directions;
+
+	// Pixel output and associated mutex
+	std::vector<sf::Uint8> pixelBuffer;
+	sf::Texture texture;
+	sf::RectangleShape sprite;
+	std::mutex pixelMutex;
 
 	// Gameloop stuff
 	time_t lastTick;
 
-	Raytracer()
+	Raytracer() :
+		pixelBuffer(WINDOW_WIDTH * WINDOW_HEIGHT * 4)
 	{
 		struct timeval time_now
 		{};
 		gettimeofday(&time_now, nullptr);
 		lastTick = (time_now.tv_sec * 1000) + (time_now.tv_usec / 1000);
 
+		// Graphics
+		texture.create(WINDOW_WIDTH, WINDOW_HEIGHT);
+		sprite.setSize({ WINDOW_WIDTH, WINDOW_HEIGHT });
+		sprite.setTexture(&texture);
+
+		// No transparency
+		for (int i = 0; i < WINDOW_WIDTH * WINDOW_HEIGHT; i++)
+		{
+			pixelBuffer[i * 4 + 3] = 255;
+		}
+
+		GenerateLevel();
+	}
+
+	void GenerateLevel()
+	{
 		for (int i = 0; i < 8; i++)
 		{
 			Vec3f pos = Vec3f(
@@ -221,6 +245,7 @@ public:
 		const Vec3f& dir,
 		int depth,
 		Color& out_color)
+
 	{
 		Collision hit {};
 		float dist = 1e6;
@@ -248,17 +273,17 @@ public:
 				out_color += hit.color;
 			};
 
-			if (depth < 8)
+			if (depth < 5)
 			{
 				Color extra {};
 				castRay(hit.position, hit.reflection, depth + 1, extra);
+				extra *= std::pow(0.6, depth + 1);
 				out_color += extra;
 			}
-			out_color *= (std::pow(0.9, depth) / (float)num);
 		}
 	};
 
-	void Render(std::vector<sf::Uint8>& pixelBuffer)
+	void RenderSingleThread(sf::RenderTarget& target)
 	{
 		for (int i = 0; i < WINDOW_WIDTH * WINDOW_HEIGHT; i++)
 		{
@@ -266,11 +291,52 @@ public:
 			Color bright {};
 			castRay(orig, directions[i], 0, bright);
 
-			uint ind = i * 4;
-			pixelBuffer[ind] = bright.r;
-			pixelBuffer[ind + 1] = bright.g;
-			pixelBuffer[ind + 2] = bright.b;
+			sf::Uint8* ptr = &pixelBuffer.at(i * 4);
+			ptr[0] = bright.r;
+			ptr[1] = bright.g;
+			ptr[2] = bright.b;
 		}
+
+		texture.update(pixelBuffer.data());
+		target.draw(sprite);
+	};
+
+	void RenderMultiThread(sf::RenderTarget& target, int numThreads = 8)
+	{
+		int portion = (WINDOW_WIDTH * WINDOW_HEIGHT) / numThreads;
+		std::vector<std::thread> workers;
+
+		for (int i = 0; i < numThreads; i++)
+		{
+			workers.push_back(std::thread([&](int iLocal) {
+				std::vector<sf::Uint8> partialBuffer(portion * 4);
+				for (int j = 0; j < portion; j++)
+				{
+					// Cast rays
+					Color color {};
+					castRay(orig, directions[j + iLocal * portion], 0, color);
+					int indLocal = j * 4;
+					partialBuffer[indLocal] = color.r;
+					partialBuffer[indLocal + 1] = color.g;
+					partialBuffer[indLocal + 2] = color.b;
+					partialBuffer[indLocal + 3] = 255;
+				}
+
+				// Need mutex to copy into "global" pixelBuffer
+				pixelMutex.lock();
+				std::copy(partialBuffer.begin(), partialBuffer.end(), pixelBuffer.begin() + (iLocal * portion * 4));
+				pixelMutex.unlock();
+			},
+				i));
+		}
+
+		for (auto& worker : workers)
+		{
+			worker.join();
+		}
+
+		texture.update(pixelBuffer.data());
+		target.draw(sprite);
 	};
 
 	void Update()
@@ -285,7 +351,7 @@ public:
 		{
 			sphere.Update(dT);
 		}
-	}
+	};
 
 	void ToggleSphereDirections()
 	{
@@ -293,7 +359,7 @@ public:
 		{
 			sphere.ToggleDirection();
 		}
-	}
+	};
 };
 
 // Run it
@@ -305,8 +371,6 @@ int main()
 	sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "Sunshine 0.1");
 
 	Raytracer tracer;
-	// Scene scene;
-	Renderer drawBuffer;
 
 	// Create a graphical text to display
 	sf::Font font;
@@ -339,8 +403,7 @@ int main()
 
 		// To the screen
 		window.clear();
-		tracer.Render(drawBuffer.pixelBuffer);
-		drawBuffer.render(window);
+		tracer.RenderMultiThread(window, 8);
 
 		// FPS
 		if (frame % 10 == 0)
@@ -351,7 +414,7 @@ int main()
 			fpsString = std::to_string(fps) + " fps";
 			fpsText = sf::Text(fpsString, font, 20);
 		}
-		if (frame % 120 == 0)
+		if (frame % 200 == 0)
 		{
 			tracer.ToggleSphereDirections();
 		}
