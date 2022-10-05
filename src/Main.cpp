@@ -95,20 +95,20 @@ struct Sphere
 		const Vec3f& direction,
 		Collision& hit)
 	{
-		Vec3f o_minus_c = orig - position;
+		auto o_minus_c = orig - position;
 
-		float p = direction.dotProduct(o_minus_c);
-		float q = o_minus_c.dotProduct(o_minus_c) - (radius * radius);
+		auto p = direction.dotProduct(o_minus_c);
+		auto q = o_minus_c.dotProduct(o_minus_c) - (radius * radius);
 
-		float discriminant = (p * p) - q;
+		auto discriminant = (p * p) - q;
 		if (discriminant < 0.0f)
 		{
 			return -1;
 		}
 
-		float dRoot = sqrt(discriminant);
-		// float dist = std::min(-p - dRoot, -p + dRoot);
-		float dist = -p - dRoot;
+		auto dRoot = sqrt(discriminant);
+		// auto dist = std::min(-p - dRoot, -p + dRoot);
+		auto dist = -p - dRoot;
 		if (dist < 0)
 		{
 			return -1;
@@ -196,29 +196,29 @@ public:
 	{
 		for (int i = 0; i < 8; i++)
 		{
-			Vec3f pos = Vec3f(
+			auto pos = Vec3f(
 				-5.0 + (10.0 * ((rand() % 1000) / 1000.0)),
 				-3.0 + (6.0 * ((rand() % 1000) / 1000.0)),
 				-10.0 - 20.0 * ((rand() % 1000) / 1000));
 
-			Vec3f vel = Vec3f((rand() % 1000), (rand() % 1000), (rand() % 1000));
+			auto vel = Vec3f((rand() % 1000), (rand() % 1000), (rand() % 1000));
 			vel /= 2000.0;
 
-			Color col = Color(rand() % 255, rand() % 255, rand() % 255);
-			Sphere s1 = Sphere(pos, 0.5 + (rand() % 1000) / 1000.0, col, vel);
+			auto col = Color(rand() % 255, rand() % 255, rand() % 255);
+			auto s1 = Sphere(pos, 0.5 + (rand() % 1000) / 1000.0, col, vel);
 			spheres.push_back(s1);
 		}
 
 		for (int i = 0; i < 2; i++)
 		{
-			Vec3f pos = Vec3f(
+			auto pos = Vec3f(
 				-5.0 + (10.0 * ((rand() % 1000) / 1000.0)),
 				-20.0 + (40.0 * ((rand() % 1000) / 1000.0)),
 				-10.0 - 20.0 * ((rand() % 1000) / 1000));
 
 			float brightness = 0.7 + 0.3 * ((rand() % 1000) / 1000.0);
 
-			Light l = Light(pos, brightness);
+			auto l = Light(pos, brightness);
 			lights.push_back(l);
 		}
 	}
@@ -267,7 +267,7 @@ public:
 			int num = (int)lights.size();
 			for (int i = 0; i < num; i++)
 			{
-				Vec3f path = hit.position - lights[i].position;
+				auto path = hit.position - lights[i].position;
 				path.normalize();
 				hit.color *= (acos(path.dotProduct(hit.normal)) / PI) * lights[i].brightness;
 				out_color += hit.color;
@@ -291,7 +291,7 @@ public:
 			Color bright {};
 			castRay(orig, directions[i], 0, bright);
 
-			sf::Uint8* ptr = &pixelBuffer.at(i * 4);
+			auto* ptr = &pixelBuffer.at(i * 4);
 			ptr[0] = bright.r;
 			ptr[1] = bright.g;
 			ptr[2] = bright.b;
@@ -344,7 +344,7 @@ public:
 		struct timeval time_now
 		{};
 		gettimeofday(&time_now, nullptr);
-		time_t t = (time_now.tv_sec * 1000) + (time_now.tv_usec / 1000);
+		auto t = (time_now.tv_sec * 1000) + (time_now.tv_usec / 1000);
 		float dT = (lastTick - t) / 1000.0;
 		lastTick = t;
 		for (auto& sphere : spheres)
