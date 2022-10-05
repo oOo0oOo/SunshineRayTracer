@@ -35,20 +35,20 @@ struct Color
 		g(gr),
 		b(bl)
 	{}
-	void operator+=(Color& col)
+	void operator+=(const Color& col)
 	{
 		r = std::min(255, col.r + r);
 		g = std::min(255, col.g + g);
 		b = std::min(255, col.b + b);
 	}
-	Color operator*(float f) const
+	Color operator*(const float f) const
 	{
 		int rr = std::min(255, (int)(r * f));
 		int gg = std::min(255, (int)(g * f));
 		int bb = std::min(255, (int)(b * f));
 		return Color(rr, gg, bb);
 	}
-	void operator*=(float f)
+	void operator*=(const float f)
 	{
 		r = std::min(255, (int)(r * f));
 		g = std::min(255, (int)(g * f));
@@ -61,7 +61,7 @@ struct Light
 	Vec3f position {};
 	float brightness;
 
-	Light(Vec3f pos, float bright) :
+	Light(const Vec3f pos, const float bright) :
 		position(pos),
 		brightness(bright)
 	{}
@@ -83,7 +83,7 @@ struct Sphere
 	Vec3f velocity {};
 	bool forward = true;
 
-	Sphere(Vec3f pos, float rad, Color col, Vec3f vel) :
+	Sphere(const Vec3f pos, const float rad, const Color col, const Vec3f vel) :
 		position(pos),
 		radius(rad),
 		color(col),
@@ -93,22 +93,22 @@ struct Sphere
 	float RayIntersection(
 		const Vec3f& orig,
 		const Vec3f& direction,
-		Collision& hit)
+		Collision& hit) const
 	{
-		auto o_minus_c = orig - position;
+		const auto o_minus_c = orig - position;
 
-		auto p = direction.dotProduct(o_minus_c);
-		auto q = o_minus_c.dotProduct(o_minus_c) - (radius * radius);
+		const auto p = direction.dotProduct(o_minus_c);
+		const auto q = o_minus_c.dotProduct(o_minus_c) - (radius * radius);
 
-		auto discriminant = (p * p) - q;
+		const auto discriminant = (p * p) - q;
 		if (discriminant < 0.0f)
 		{
 			return -1;
 		}
 
-		auto dRoot = sqrt(discriminant);
+		const auto dRoot = sqrt(discriminant);
 		// auto dist = std::min(-p - dRoot, -p + dRoot);
-		auto dist = -p - dRoot;
+		const auto dist = -p - dRoot;
 		if (dist < 0)
 		{
 			return -1;
@@ -124,7 +124,7 @@ struct Sphere
 		return dist;
 	}
 
-	void Update(float dT)
+	void Update(const float dT)
 	{
 		if (forward)
 			position += velocity * dT;
@@ -196,7 +196,7 @@ public:
 	{
 		for (int i = 0; i < 8; i++)
 		{
-			auto pos = Vec3f(
+			const auto pos = Vec3f(
 				-5.0 + (10.0 * ((rand() % 1000) / 1000.0)),
 				-3.0 + (6.0 * ((rand() % 1000) / 1000.0)),
 				-10.0 - 20.0 * ((rand() % 1000) / 1000));
@@ -204,19 +204,19 @@ public:
 			auto vel = Vec3f((rand() % 1000), (rand() % 1000), (rand() % 1000));
 			vel /= 2000.0;
 
-			auto col = Color(rand() % 255, rand() % 255, rand() % 255);
+			const auto col = Color(rand() % 255, rand() % 255, rand() % 255);
 			auto s1 = Sphere(pos, 0.5 + (rand() % 1000) / 1000.0, col, vel);
 			spheres.push_back(s1);
 		}
 
 		for (int i = 0; i < 2; i++)
 		{
-			auto pos = Vec3f(
+			const auto pos = Vec3f(
 				-5.0 + (10.0 * ((rand() % 1000) / 1000.0)),
 				-20.0 + (40.0 * ((rand() % 1000) / 1000.0)),
 				-10.0 - 20.0 * ((rand() % 1000) / 1000));
 
-			float brightness = 0.7 + 0.3 * ((rand() % 1000) / 1000.0);
+			const float brightness = 0.7 + 0.3 * ((rand() % 1000) / 1000.0);
 
 			auto l = Light(pos, brightness);
 			lights.push_back(l);
@@ -231,8 +231,8 @@ public:
 		{
 			for (uint32_t i = 0; i < WINDOW_WIDTH; ++i)
 			{
-				float x = (2 * (i + 0.5) / (float)WINDOW_WIDTH - 1) * aspectRatio * scale;
-				float y = (1 - 2 * (j + 0.5) / (float)WINDOW_HEIGHT) * scale;
+				const float x = (2 * (i + 0.5) / (float)WINDOW_WIDTH - 1) * aspectRatio * scale;
+				const float y = (1 - 2 * (j + 0.5) / (float)WINDOW_HEIGHT) * scale;
 				Vec3f dir {};
 				cameraToWorld.multDirMatrix(Vec3f(x, y, -1), dir);
 				dir.normalize();
@@ -241,9 +241,9 @@ public:
 		}
 	};
 
-	void castRay(Vec3f& orig,
+	void castRay(const Vec3f& orig,
 		const Vec3f& dir,
-		int depth,
+		const int depth,
 		Color& out_color)
 
 	{
@@ -253,7 +253,7 @@ public:
 		for (int i = 0; i < (int)spheres.size(); i++)
 		{
 			Collision c_hit;
-			float cdist = spheres[i].RayIntersection(orig, dir, c_hit);
+			const float cdist = spheres[i].RayIntersection(orig, dir, c_hit);
 			if (cdist > 0 && cdist < dist)
 			{
 				hit = c_hit;
@@ -264,7 +264,7 @@ public:
 		if (dist > 0 && dist < 1000)
 		{
 			// Check illumination
-			int num = (int)lights.size();
+			const int num = (int)lights.size();
 			for (int i = 0; i < num; i++)
 			{
 				auto path = hit.position - lights[i].position;
@@ -315,7 +315,7 @@ public:
 					// Cast rays
 					Color color {};
 					castRay(orig, directions[j + iLocal * portion], 0, color);
-					int indLocal = j * 4;
+					const int indLocal = j * 4;
 					partialBuffer[indLocal] = color.r;
 					partialBuffer[indLocal + 1] = color.g;
 					partialBuffer[indLocal + 2] = color.b;
@@ -344,8 +344,8 @@ public:
 		struct timeval time_now
 		{};
 		gettimeofday(&time_now, nullptr);
-		auto t = (time_now.tv_sec * 1000) + (time_now.tv_usec / 1000);
-		float dT = (lastTick - t) / 1000.0;
+		const auto t = (time_now.tv_sec * 1000) + (time_now.tv_usec / 1000);
+		const float dT = (lastTick - t) / 1000.0;
 		lastTick = t;
 		for (auto& sphere : spheres)
 		{
@@ -408,8 +408,8 @@ int main()
 		// FPS
 		if (frame % 10 == 0)
 		{
-			float tick = clock.getElapsedTime().asSeconds();
-			int fps = round(1.0f / ((tick - lastTick) / 10.0f));
+			const float tick = clock.getElapsedTime().asSeconds();
+			const int fps = round(1.0f / ((tick - lastTick) / 10.0f));
 			lastTick = tick;
 			fpsString = std::to_string(fps) + " fps";
 			fpsText = sf::Text(fpsString, font, 20);
