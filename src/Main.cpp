@@ -73,6 +73,7 @@ struct Collision
 	Vec3f reflection;
 	Vec3f normal;
 	Color color;
+	float distance = 0;
 };
 
 struct Sphere
@@ -90,10 +91,9 @@ struct Sphere
 		velocity(vel)
 	{}
 
-	float RayIntersection(
+	Collision RayIntersection(
 		const Vec3f& orig,
-		const Vec3f& direction,
-		Collision& hit) const
+		const Vec3f& direction) const
 	{
 		const auto o_minus_c = orig - position;
 
@@ -101,9 +101,12 @@ struct Sphere
 		const auto q = o_minus_c.dotProduct(o_minus_c) - (radius * radius);
 
 		const auto discriminant = (p * p) - q;
+
+		Collision hit {};
+
 		if (discriminant < 0.0f)
 		{
-			return -1;
+			return hit;
 		}
 
 		const auto dRoot = sqrt(discriminant);
@@ -111,7 +114,7 @@ struct Sphere
 		const auto dist = -p - dRoot;
 		if (dist < 0)
 		{
-			return -1;
+			return hit;
 		}
 
 		// Calc hit position and reflection
@@ -120,8 +123,9 @@ struct Sphere
 		hit.normal.normalize();
 		hit.reflection = direction - hit.normal * 2 * direction.dotProduct(hit.normal);
 		hit.color = color;
+		hit.distance = dist;
 
-		return dist;
+		return hit;
 	}
 
 	void Update(const float dT)
@@ -241,10 +245,9 @@ public:
 		}
 	};
 
-	void castRay(const Vec3f& orig,
+	Color castRay(const Vec3f& orig,
 		const Vec3f& dir,
-		const int depth,
-		Color& out_color)
+		const int depth)
 
 	{
 		Collision hit {};
@@ -252,14 +255,15 @@ public:
 
 		for (int i = 0; i < (int)spheres.size(); i++)
 		{
-			Collision c_hit;
-			const float cdist = spheres[i].RayIntersection(orig, dir, c_hit);
-			if (cdist > 0 && cdist < dist)
+			const auto c_hit = spheres[i].RayIntersection(orig, dir);
+			if (c_hit.distance > 0 && c_hit.distance < dist)
 			{
 				hit = c_hit;
-				dist = cdist;
+				dist = c_hit.distance;
 			}
 		}
+
+		Color out_color {};
 
 		if (dist > 0 && dist < 1000)
 		{
@@ -275,12 +279,12 @@ public:
 
 			if (depth < 5)
 			{
-				Color extra {};
-				castRay(hit.position, hit.reflection, depth + 1, extra);
-				extra *= std::pow(0.6, depth + 1);
-				out_color += extra;
+				auto extra_color = castRay(hit.position, hit.reflection, depth + 1);
+				extra_color *= std::pow(0.6, depth + 1);
+				out_color += extra_color;
 			}
 		}
+		return out_color;
 	};
 
 	void RenderSingleThread(sf::RenderTarget& target)
@@ -288,8 +292,7 @@ public:
 		for (int i = 0; i < WINDOW_WIDTH * WINDOW_HEIGHT; i++)
 		{
 			// Cast ray
-			Color bright {};
-			castRay(orig, directions[i], 0, bright);
+			auto bright = castRay(orig, directions[i], 0);
 
 			auto* ptr = &pixelBuffer.at(i * 4);
 			ptr[0] = bright.r;
@@ -313,8 +316,7 @@ public:
 				for (int j = 0; j < portion; j++)
 				{
 					// Cast rays
-					Color color {};
-					castRay(orig, directions[j + iLocal * portion], 0, color);
+					auto color = castRay(orig, directions[j + iLocal * portion], 0);
 					const int indLocal = j * 4;
 					partialBuffer[indLocal] = color.r;
 					partialBuffer[indLocal + 1] = color.g;
